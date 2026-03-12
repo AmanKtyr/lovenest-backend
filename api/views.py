@@ -26,6 +26,16 @@ from .serializers import (
     ContactMessageCreateSerializer, SupportTicketSerializer
 )
 
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def health_check(request):
+    return Response({
+        'status': 'ok',
+        'message': 'LoveNest API is running smoothly!',
+        'timestamp': timezone.now()
+    }, status=status.HTTP_200_OK)
+
+
 class ContactMessageCreateView(generics.CreateAPIView):
     queryset = ContactMessage.objects.all()
     serializer_class = ContactMessageCreateSerializer

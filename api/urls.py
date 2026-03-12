@@ -5,7 +5,8 @@ from .views import (
     BucketItemViewSet, LoveNoteViewSet,
     LoveLanguageViewSet, LoveLanguageActionViewSet, GratitudeEntryViewSet,
     DateIdeaViewSet, QuestionViewSet, AnswerViewSet, TodoViewSet, NotificationViewSet,
-    CalendarViewSet, ActivePopupView, ContactMessageCreateView, UserSupportTicketViewSet
+    CalendarViewSet, ActivePopupView, ContactMessageCreateView, UserSupportTicketViewSet,
+    health_check
 )
 
 router = DefaultRouter()
@@ -30,6 +31,7 @@ router.register(r'notifications', NotificationViewSet, basename='notifications')
 router.register(r'calendar', CalendarViewSet, basename='calendar')
 
 urlpatterns = [
+    path('health-check/', health_check, name='health-check'),
     path('', include(router.urls)),
     path('active-popup/', ActivePopupView.as_view(), name='active-popup'),
     path('contact/', ContactMessageCreateView.as_view(), name='contact'),
