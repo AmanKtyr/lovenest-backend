@@ -1,0 +1,17 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<p>Hi {{ name }},</p>
+
+<p>Your sanctuary is officially created! {% if code %}Here is your partner invitation code: <span class="highlight">{{
+        code }}</span>{% endif %}</p>
+
+<p>Whenever you and your partner are ready to connect, they can easily join using this code on the LoveNest setup page.
+    Until then, you can explore the space on your own.</p>
+
+<div style="text-align: center; margin: 32px 0;">
+    <a href="{{ dashboard_url }}"
+        style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Go
+        to Dashboard</a>
+</div>
+{% endblock %}

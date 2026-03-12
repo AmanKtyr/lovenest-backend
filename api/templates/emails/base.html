@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ subject }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 0;
+            background-color: #f9fafb;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid #f3f4f6;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+        }
+        h1 {
+            color: #111827;
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: -0.025em;
+        }
+        p {
+            color: #4b5563;
+            font-size: 16px;
+            margin-bottom: 24px;
+        }
+        .code-box {
+            background: linear-gradient(135deg, #fff0f5 0%, #f0f8ff 100%);
+            border: 1px dashed #FFB7C5;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            margin: 32px 0;
+        }
+        .code {
+            font-size: 32px;
+            font-weight: 900;
+            color: #D6336C;
+            letter-spacing: 0.2em;
+            font-family: monospace;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #f3f4f6;
+        }
+        .footer p {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 8px;
+        }
+        .highlight {
+            color: #D6336C;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="header">
+                <!-- Replace with actual absolute URL to your logo when in production -->
+                <h1>LoveNest</h1>
+            </div>
+            
+            {% block content %}{% endblock %}
+            
+            <div class="footer">
+                <p>This is an automated message from LoveNest. Please do not reply.</p>
+                <p>&copy; {% now "Y" %} LoveNest. All rights reserved.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

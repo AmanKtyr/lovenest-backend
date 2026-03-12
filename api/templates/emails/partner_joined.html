@@ -1,0 +1,18 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<p>Hi {{ name }},</p>
+
+<p>Great news! <span class="highlight">{{ partner_name }}</span> has successfully joined your LoveNest space.</p>
+
+<p>Your private sanctuary is now fully connected. All your shared memories, plans, and moments will now be synced
+    securely between the two of you.</p>
+
+<p>Log in now to see their first updates or send them a love note to welcome them.</p>
+
+<div style="text-align: center; margin: 32px 0;">
+    <a href="{{ dashboard_url }}"
+        style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Open
+        LoveNest</a>
+</div>
+{% endblock %}

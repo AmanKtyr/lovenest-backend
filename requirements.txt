@@ -1,0 +1,13 @@
+asgiref==3.11.0
+Django==6.0.1
+django-cors-headers==4.9.0
+djangorestframework==3.16.1
+pillow==12.1.0
+python-dateutil==2.9.0.post0
+six==1.17.0
+sqlparse==0.5.5
+tzdata==2025.3
+google-generativeai
+python-dotenv
+
+google-auth

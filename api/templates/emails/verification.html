@@ -1,0 +1,19 @@
+{% extends "emails/base.html" %}
+
+{% block content %}
+<p>Hi {{ name }},</p>
+
+<p>Welcome to LoveNest! You're one step away from joining your private sanctuary. To ensure the security of your
+    account, please verify your email address.</p>
+
+<div class="code-box">
+    <p
+        style="margin-bottom: 8px; text-transform: uppercase; font-size: 12px; font-weight: bold; color: #6b7280; letter-spacing: 0.1em;">
+        Your Verification Code</p>
+    <div class="code">{{ code }}</div>
+</div>
+
+<p>Enter this code in the LoveNest app to complete your registration. This code will expire in 15 minutes.</p>
+
+<p>If you didn't create an account, you can safely ignore this email.</p>
+{% endblock %}
