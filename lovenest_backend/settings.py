@@ -162,6 +162,7 @@ CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api.authentication.TokenQueryParamAuthentication',
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
@@ -171,3 +172,4 @@ REST_FRAMEWORK = {
 }
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+IMAGE_ENCRYPTION_KEY = os.environ.get("IMAGE_ENCRYPTION_KEY")
