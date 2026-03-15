@@ -1,6 +1,9 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 import uuid
+import os
+from django.core.files.base import ContentFile
+from django.apps import apps
 
 class User(AbstractUser):
     GENDER_CHOICES = [
@@ -36,6 +39,40 @@ class User(AbstractUser):
     # Super Admin Analytics Fields
     last_seen = models.DateTimeField(null=True, blank=True)
     total_active_seconds = models.PositiveIntegerField(default=0)
+
+    def save(self, *args, **kwargs):
+        from .media_handlers import compress_image, encrypt_image
+        from django.core.files.uploadedfile import UploadedFile
+        from django.core.files.base import ContentFile
+
+        # 1. Industrial Ready: Old profile image cleanup
+        if self.pk:
+            try:
+                old_user = User.objects.get(pk=self.pk)
+                if old_user.profile_image and self.profile_image != old_user.profile_image:
+                    try:
+                        old_path = old_user.profile_image.path
+                        if os.path.isfile(old_path):
+                            os.remove(old_path)
+                    except (PermissionError, OSError):
+                        pass  # File locked or already gone — signals will clean up later
+            except User.DoesNotExist:
+                pass
+
+        # 2. Compress and Encrypt on NEW uploads
+        if self.profile_image and isinstance(self.profile_image.file, UploadedFile):
+            try:
+                processed_file = compress_image(self.profile_image)
+                raw_bytes = processed_file.read()
+                encrypted_bytes = encrypt_image(raw_bytes)
+                
+                original_name = self.profile_image.name
+                self.profile_image.save(original_name, ContentFile(encrypted_bytes), save=False)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Profile image processing failed for User {self.id}: {str(e)}")
+
+        super().save(*args, **kwargs)
 
 class Couple(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -89,6 +126,44 @@ class Memory(models.Model):
 
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        from .media_handlers import compress_image, encrypt_image
+        from django.apps import apps
+        from django.core.files.base import ContentFile
+        from django.core.files.uploadedfile import UploadedFile
+        
+        # 1. Enforce Memory Limits for Free Users (150 Images)
+        if not self.pk: # Only check on creation
+            try:
+                UserSubscription = apps.get_model('subscriptions', 'UserSubscription')
+                sub = UserSubscription.objects.filter(couple=self.couple).first()
+                if not sub or sub.tier == 'FREE':
+                    memory_count = Memory.objects.filter(couple=self.couple).count()
+                    if memory_count >= 150:
+                        from django.core.exceptions import ValidationError
+                        raise ValidationError("Free tier limit reached (150 memories). Upgrade to Premium for unlimited moments.")
+            except (LookupError, AttributeError):
+                pass 
+
+        # 2. Industrial Grade: Compress then Encrypt only on NEW uploads
+        # We detect a new upload if the image is an instance of UploadedFile
+        if self.image and isinstance(self.image.file, UploadedFile):
+            try:
+                # Compression
+                processed_file = compress_image(self.image)
+                # Encryption
+                raw_bytes = processed_file.read()
+                encrypted_bytes = encrypt_image(raw_bytes)
+                
+                # Replace with encrypted content
+                original_name = self.image.name
+                self.image.save(original_name, ContentFile(encrypted_bytes), save=False)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Image processing failed for Memory {self.id}: {str(e)}")
+                
+        super().save(*args, **kwargs)
 
 class ImportantDate(models.Model):
     couple = models.ForeignKey(Couple, on_delete=models.CASCADE, related_name='important_dates')

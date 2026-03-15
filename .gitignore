@@ -1,30 +1,35 @@
-# Python
+# Django
+*.log
+*.pot
+*.pyc
 __pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+
+# Backup files
+*.bak
+*.swp
+*~
+.DS_Store
+
+# Environment variables
+.env/
+env
+.venv/
+env/
+
+venv/
+ENV/
+
+# Python
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Django
-db.sqlite3
-db.sqlite3-journal
-staticfiles/
-media/
-media_root/
-
-# Environment variables
-.env
-
-# IDEs
-.vscode/
-.idea/
-
-# Distribution / packaging
+build/
 develop-eggs/
 dist/
 downloads/
@@ -39,3 +44,30 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.pytest_cache/
+.nosepy/
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+users.txt
+out.json
+list_models.py
+

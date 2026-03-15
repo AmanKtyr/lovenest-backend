@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status, generics, permissions, parsers
 from rest_framework.response import Response
+from django.http import HttpResponse, Http404
 from dateutil.relativedelta import relativedelta
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.authtoken.models import Token
@@ -16,6 +17,7 @@ from .models import (
 )
 from .mailer import InternalMailer
 from django.conf import settings
+from .media_handlers import decrypt_image
 from .serializers import (
     UserSerializer, RegisterSerializer, CoupleSerializer,
     MemorySerializer, ImportantDateSerializer, RuleSerializer, DashboardSerializer,
@@ -773,6 +775,29 @@ class MemoryViewSet(BaseCoupleViewSet):
     queryset = Memory.objects.all()
     serializer_class = MemorySerializer
 
+    @action(detail=True, methods=['get'])
+    def secure_image(self, request, pk=None):
+        memory = self.get_object()
+        if not memory.image:
+            raise Http404("No image")
+        
+        try:
+            with open(memory.image.path, 'rb') as f:
+                encrypted_data = f.read()
+            
+            from .media_handlers import decrypt_image
+            decrypted_data = decrypt_image(encrypted_data)
+            
+            # Since we compress to JPEG in our utility, we serve as image/jpeg
+            return HttpResponse(decrypted_data, content_type="image/jpeg")
+        except Exception:
+            # Fallback if decryption fails (might be an old unencrypted image)
+            try:
+                with open(memory.image.path, 'rb') as f:
+                    return HttpResponse(f.read(), content_type="image/jpeg")
+            except Exception:
+                raise Http404("Image could not be served")
+
 class ImportantDateViewSet(BaseCoupleViewSet):
     queryset = ImportantDate.objects.all()
     serializer_class = ImportantDateSerializer
@@ -1149,5 +1174,47 @@ class UserSupportTicketViewSet(BaseCoupleViewSet):
             ticket.save()
             
         return Response(SupportTicketSerializer(ticket).data)
+
+class SecureProfileImageView(generics.RetrieveAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, user_id):
+        try:
+            target_user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            raise Http404("User not found")
+        
+        # Security Check: Only allow self, partner, or staff
+        is_self = request.user == target_user
+        is_partner = False
+        
+        user_couple = getattr(request.user, 'couple_as_p1', None) or getattr(request.user, 'couple_as_p2', None)
+        if user_couple:
+            partner = user_couple.get_other_user(request.user)
+            if partner == target_user:
+                is_partner = True
+        
+        if not (is_self or is_partner or request.user.is_staff):
+            return Response({'error': 'Unauthorized'}, status=status.HTTP_403_FORBIDDEN)
+            
+        if not target_user.profile_image:
+            raise Http404("No profile image")
+            
+        try:
+            from .media_handlers import decrypt_image
+            with open(target_user.profile_image.path, 'rb') as f:
+                encrypted_data = f.read()
+            
+            decrypted_data = decrypt_image(encrypted_data)
+            return HttpResponse(decrypted_data, content_type="image/jpeg")
+        except Exception:
+            # Fallback for unencrypted old images
+            try:
+                with open(target_user.profile_image.path, 'rb') as f:
+                    return HttpResponse(f.read(), content_type="image/jpeg")
+            except Exception:
+                raise Http404("Image could not be served")
+
+
 
 

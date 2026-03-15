@@ -7,13 +7,55 @@ from .models import (
 from django.contrib.auth import authenticate
 
 class UserSerializer(serializers.ModelSerializer):
+    # Write-only: accepts image uploads from frontend
+    profile_image = serializers.ImageField(write_only=True, required=False, allow_null=True)
+    # Read-only: returns secure URL for display
+    profile_image_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'phone_number',
             'gender', 'relationship_status', 'date_of_birth', 'anniversary_date',
-            'profile_image', 'current_mood', 'mood_updated_at', 'is_superuser', 'is_staff'
+            'profile_image', 'profile_image_url', 'current_mood', 'mood_updated_at', 'is_superuser', 'is_staff'
         ]
+
+    def get_profile_image_url(self, obj):
+        if not obj.profile_image:
+            return None
+        request = self.context.get('request')
+        if request:
+            # Append token for img src authentication
+            token_key = ''
+            if request.user and request.user.is_authenticated:
+                from rest_framework.authtoken.models import Token
+                token_obj = Token.objects.filter(user=request.user).first()
+                if token_obj:
+                    token_key = f"?token={token_obj.key}"
+            return request.build_absolute_uri(f"/api/secure-profile/{obj.id}/{token_key}")
+        return f"/api/secure-profile/{obj.id}/"
+
+    def validate_email(self, value):
+        """Allow the current user to keep their own email, but block duplicates."""
+        user = self.instance
+        if user and User.objects.filter(email__iexact=value).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This email is already in use by another account.")
+        return value
+
+    def update(self, instance, validated_data):
+        # Handle profile_image separately so compression+encryption in model.save() runs
+        profile_image = validated_data.pop('profile_image', None)
+        
+        # Update all other fields
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # If a new image was provided, assign it directly so model.save() processes it
+        if profile_image is not None:
+            instance.profile_image = profile_image
+        
+        instance.save()
+        return instance
 
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True)
@@ -85,10 +127,37 @@ class CoupleSerializer(serializers.ModelSerializer):
                  'is_deletion_pending', 'deletion_requested_by', 'deletion_requested_at']
 
 class MemorySerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(write_only=True, required=False, allow_null=True)
+    image_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = Memory
-        fields = ['id', 'title', 'description', 'date', 'image', 'created_at']
+        fields = ['id', 'title', 'description', 'date', 'image', 'image_url', 'created_at']
         read_only_fields = ['couple']
+
+    def get_image_url(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get('request')
+        if request:
+            # Append token for img src authentication
+            token_key = ''
+            if request.user and request.user.is_authenticated:
+                from rest_framework.authtoken.models import Token
+                token_obj = Token.objects.filter(user=request.user).first()
+                if token_obj:
+                    token_key = f"?token={token_obj.key}"
+            return request.build_absolute_uri(f"/api/memories/{obj.id}/secure_image/{token_key}")
+        return f"/api/memories/{obj.id}/secure_image/"
+
+    def update(self, instance, validated_data):
+        image = validated_data.pop('image', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        if image is not None:
+            instance.image = image
+        instance.save()
+        return instance
 
 class ImportantDateSerializer(serializers.ModelSerializer):
     class Meta:

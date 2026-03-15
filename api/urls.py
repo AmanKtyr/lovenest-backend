@@ -6,7 +6,7 @@ from .views import (
     LoveLanguageViewSet, LoveLanguageActionViewSet, GratitudeEntryViewSet,
     DateIdeaViewSet, QuestionViewSet, AnswerViewSet, TodoViewSet, NotificationViewSet,
     CalendarViewSet, ActivePopupView, ContactMessageCreateView, UserSupportTicketViewSet,
-    health_check
+    SecureProfileImageView, health_check
 )
 
 router = DefaultRouter()
@@ -35,5 +35,6 @@ urlpatterns = [
     path('', include(router.urls)),
     path('active-popup/', ActivePopupView.as_view(), name='active-popup'),
     path('contact/', ContactMessageCreateView.as_view(), name='contact'),
+    path('secure-profile/<int:user_id>/', SecureProfileImageView.as_view(), name='secure-profile-image'),
     path('superadmin/', include('superadmin.urls')),
 ]
