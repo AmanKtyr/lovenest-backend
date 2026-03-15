@@ -16,7 +16,7 @@ staticfiles/
 .DS_Store
 
 # Environment variables
-.env/
+.env
 env
 .venv/
 env/
