@@ -5,7 +5,7 @@ import json
 
 # Configure Gemini API
 # Use the recommended model for text generation
-MODEL_NAME = "gemini-2.5-flash"
+MODEL_NAME = "gemini-2.0-flash-lite"
 
 def get_model():
     # Try Django settings first, then direct environment variable
@@ -64,30 +64,53 @@ class AIGeneratorService:
             raise Exception(f"AI Error: {error_msg}")
 
     @staticmethod
-    def relationship_coach_chat(history: list, new_message: str) -> str:
+    def relationship_coach_chat(history: list, new_message: str, context: str = "") -> str:
         """
-        Chatbot for relationship coaching.
+        Chatbot for relationship coaching with strict persona and space awareness.
         history: [{"role": "user"|"model", "parts": ["text"]}]
+        context: String containing dashboard info (todos, dates, etc.)
         """
         model = get_model()
         
-        system_instruction = "You are an empathetic, professional relationship coach. Provide helpful, non-judgmental advice to couples to improve communication, resolve conflicts, and strengthen their bond. Keep answers concise, practical, and supportive."
+        system_instruction = f"""
+        You are "Cupid", a professional, empathetic, and premium Relationship Coach.
         
-        # In newer Gemini SDKs, system instructions can be passed. 
-        # For simplicity, we prepend it if history is empty.
+        CORE PERSONA:
+        - Your expertise is STRICTLY limited to relationships, communication, emotional wellness, and shared life planning.
+        - You are warm, non-judgmental, and practical.
+        - You use the provided relationship context to give highly personalized and relevant advice.
+        
+        STRICT BOUNDARIES:
+        - If the user asks about ANY topic outside of relationship coaching (e.g., programming/coding, general knowledge, math, science, politics, etc.), you must politely refuse.
+        - REJECTION MESSAGE: "As your Relationship Coach, my heart and focus are entirely on your bond. I'm here to help with your love journey, communication, and shared dreams. For [User Topic], a specialist in that field would serve you better. Now, how can I help strengthen your connection today?"
+        
+        CURRENT RELATIONSHIP CONTEXT:
+        {context if context else "No specific context provided yet."}
+        
+        INSTRUCTIONS:
+        1. Always prioritize the well-being of the relationship.
+        2. Keep advice concise but meaningful.
+        3. If you see upcoming occasions or pending todos in the context, feel free to reference them if relevant to the user's question.
+        4. Never break character.
+        """
         
         formatted_history = []
         for msg in history:
             formatted_history.append({"role": msg.get("role", "user"), "parts": [msg.get("content", "")]})
             
         try:
+            # We use the system_instruction as the first message if history is empty
+            # or we can pass it as a preamble. Prepending to the message is safer for all SDK versions.
+            
             chat = model.start_chat(history=formatted_history)
             
-            # If first message, inject system behavior
             if not history:
-                new_message = f"{system_instruction}\n\nUser Question: {new_message}"
+                prompt = f"{system_instruction}\n\nClient: {new_message}"
+            else:
+                # Even for subsequent messages, we remind of the context and persona briefly
+                prompt = f"(Context Reminder: {context[:500]})\nClient: {new_message}"
                 
-            response = chat.send_message(new_message)
+            response = chat.send_message(prompt)
             return response.text
         except Exception as e:
             error_msg = str(e)

@@ -463,19 +463,27 @@ class AuthViewSet(viewsets.ViewSet):
         if not mood:
             return Response({'error': 'Mood is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        user = request.user
-        user.current_mood = mood
-        user.save()
+        # Use queryset update to bypass User.save() which processes profile images
+        # and can crash with FileNotFoundError if image files are missing locally
+        User.objects.filter(pk=request.user.pk).update(current_mood=mood)
+        
+        # Refresh user from DB to get updated data
+        user = User.objects.get(pk=request.user.pk)
 
-        # Notify partner
-        from .signals import create_notification
-        create_notification(
-            sender_user=user,
-            couple=user.couple_as_p1 if hasattr(user, 'couple_as_p1') else user.couple_as_p2,
-            verb=f"updated their mood to: {mood}",
-            target_model='User',
-            target_id=user.id
-        )
+        # Notify partner (non-blocking — mood update should never fail because of this)
+        try:
+            from .signals import create_notification
+            couple = getattr(user, 'couple_as_p1', None) or getattr(user, 'couple_as_p2', None)
+            if couple:
+                create_notification(
+                    sender_user=user,
+                    couple=couple,
+                    verb=f"updated their mood to: {mood}",
+                    target_model='User',
+                    target_id=user.id
+                )
+        except Exception:
+            pass  # Don't let notification failure break mood update
 
         return Response(UserSerializer(user).data)
 
