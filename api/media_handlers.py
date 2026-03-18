@@ -8,27 +8,35 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def compress_image(image_file, max_size=(1080, 1080), quality=75):
+def compress_image(image_file, max_size=(1920, 1920), quality=85):
     """
     Compresses an image to a maximum dimension and reduces quality.
-    Returns a ContentFile ready for Django's ImageField.
+    Strictly enforces a 2MB (2,097,152 bytes) limit.
     """
     img = Image.open(image_file)
     
-    # Convert RGBA to RGB if necessary (for PNGs)
+    # Convert RGBA to RGB if necessary (for JPEG support)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     
-    # Resize if larger than max_size while maintaining aspect ratio
+    # Industrial Ready: Higher cap for better clarity on large screens
     img.thumbnail(max_size, Image.Resampling.LANCZOS)
     
-    # Save to buffer
-    buffer = io.BytesIO()
-    img.save(buffer, format='JPEG', quality=quality, optimize=True)
+    # Iterative compression to stay under 2MB
+    MAX_BYTES = 2 * 1024 * 1024
+    current_quality = quality
     
-    # Get values and return ContentFile
-    buffer.seek(0)
-    return ContentFile(buffer.getvalue(), name=os.path.basename(image_file.name))
+    while True:
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=current_quality, optimize=True)
+        size = buffer.tell()
+        
+        if size <= MAX_BYTES or current_quality <= 20:
+            buffer.seek(0)
+            return ContentFile(buffer.getvalue(), name=os.path.basename(image_file.name))
+        
+        # Reduce quality and try again
+        current_quality -= 10
 
 def get_cipher():
     """Returns a Fernet cipher using the key from settings."""

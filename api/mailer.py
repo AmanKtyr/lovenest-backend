@@ -52,15 +52,20 @@ class InternalMailer:
 
     @classmethod
     def send_verification_code(cls, user, code):
-        """Send 6-digit verification code to new user"""
+        """Send 6-digit verification code to user's registered email"""
+        cls.send_verification_code_to_email(user.email, user.first_name or user.username, code)
+
+    @classmethod
+    def send_verification_code_to_email(cls, email, name, code):
+        """Send 6-digit verification code to a specific email"""
         html_message = render_to_string('emails/verification.html', {
-            'name': user.first_name or user.username,
+            'name': name,
             'code': code
         })
         cls.send_email_async(
             subject="LoveNest - Your Verification Code",
             html_content=html_message,
-            recipient_list=[user.email]
+            recipient_list=[email]
         )
 
     @classmethod

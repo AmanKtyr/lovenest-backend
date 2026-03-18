@@ -380,6 +380,21 @@ class Todo(models.Model):
     def __str__(self):
         return self.title
 
+class Countdown(models.Model):
+    couple = models.ForeignKey(Couple, on_delete=models.CASCADE, related_name='countdowns')
+    title = models.CharField(max_length=200)
+    target_date = models.DateTimeField()
+    is_pinned = models.BooleanField(default=False)
+    is_notified = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['target_date']
+
+    def __str__(self):
+        return self.title
+
 
 # Phase 2: Super Admin Features
 

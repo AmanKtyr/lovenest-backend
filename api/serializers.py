@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     User, Couple, Memory, ImportantDate, Rule, BucketItem, LoveNote,
     LoveLanguage, LoveLanguageAction, GratitudeEntry, DateIdea, Question, Answer, Todo, Notification,
-    AnnouncementPopup, ContactMessage, SupportTicket, TicketMessage
+    AnnouncementPopup, ContactMessage, SupportTicket, TicketMessage, Countdown
 )
 from django.contrib.auth import authenticate
 
@@ -38,7 +38,10 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         """Allow the current user to keep their own email, but block duplicates."""
         user = self.instance
-        if user and User.objects.filter(email__iexact=value).exclude(pk=user.pk).exists():
+        if value:
+            value = value.lower().strip()
+            
+        if user and user.pk and User.objects.filter(email__iexact=value).exclude(pk=user.pk).exists():
             raise serializers.ValidationError("This email is already in use by another account.")
         return value
 
@@ -178,6 +181,12 @@ class BucketItemSerializer(serializers.ModelSerializer):
         model = BucketItem
         fields = ['id', 'title', 'description', 'category', 'category_display', 'is_completed', 'created_at']
         read_only_fields = ['couple']
+
+class CountdownSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Countdown
+        fields = ['id', 'title', 'target_date', 'is_pinned', 'is_notified', 'created_at']
+        read_only_fields = ['couple']
 class LoveNoteSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
     
@@ -190,6 +199,7 @@ class DashboardSerializer(serializers.Serializer):
     couple = CoupleSerializer()
     memories = MemorySerializer(many=True)
     important_dates = ImportantDateSerializer(many=True)
+    countdowns = CountdownSerializer(many=True)
     rules = RuleSerializer(many=True)
     bucket_items = BucketItemSerializer(many=True)
     love_notes = LoveNoteSerializer(many=True)

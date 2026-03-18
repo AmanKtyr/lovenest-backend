@@ -11,7 +11,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import os
 from .models import (
-    User, Couple, Memory, ImportantDate, Rule, BucketItem, LoveNote,
+    User, Couple, Memory, ImportantDate, Rule, BucketItem, LoveNote, Countdown,
     LoveLanguage, LoveLanguageAction, GratitudeEntry, DateIdea, Question, Answer, Todo, Notification,
     AnnouncementPopup, ContactMessage, SupportTicket, TicketMessage, VerificationCode, SiteSetting
 )
@@ -25,7 +25,7 @@ from .serializers import (
     LoveLanguageSerializer, LoveLanguageActionSerializer,
     GratitudeEntrySerializer, DateIdeaSerializer, QuestionSerializer, AnswerSerializer,
     TodoSerializer, NotificationSerializer, AnnouncementPopupSerializer,
-    ContactMessageCreateSerializer, SupportTicketSerializer
+    ContactMessageCreateSerializer, SupportTicketSerializer, CountdownSerializer
 )
 
 @api_view(['GET'])
@@ -490,11 +490,100 @@ class AuthViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['patch'], permission_classes=[permissions.IsAuthenticated], parser_classes=[parsers.MultiPartParser, parsers.FormParser, parsers.JSONParser])
     def update_profile(self, request):
         user = request.user
+        
+        # Detect email change attempt
+        new_email = request.data.get('email')
+        if new_email and new_email.lower().strip() != user.email.lower():
+            # Professional: Don't allow direct email change via update_profile
+            # if the user wants verification. We return a specific code.
+            return Response({
+                'error': 'Email verification required',
+                'code': 'EMAIL_CHANGE_REQUIRED',
+                'message': 'To change your email, please use the verification flow.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
         serializer = UserSerializer(user, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def request_email_change(self, request):
+        new_email = request.data.get('new_email')
+        if not new_email:
+            return Response({'error': 'New email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        new_email = new_email.lower().strip()
+        
+        # Check if email is already in use
+        if User.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
+            return Response({'error': 'This email is already registered with another account.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Rate Limiting: 60 seconds
+        last_code = VerificationCode.objects.filter(
+            user=request.user,
+            purpose='change_email',
+            created_at__gt=timezone.now() - timezone.timedelta(seconds=60)
+        ).first()
+        
+        if last_code:
+            return Response({
+                'error': 'Please wait 60 seconds before requesting another code.'
+            }, status=status.HTTP_429_TOO_MANY_REQUESTS)
+            
+        # Generate and send verification code to the NEW email
+        code = get_random_string(6, allowed_chars='0123456789')
+        VerificationCode.objects.create(
+            user=request.user,
+            code=code,
+            purpose='change_email',
+            expires_at=timezone.now() + timezone.timedelta(minutes=15)
+        )
+        
+        # We send it to the NEW email to verify ownership
+        InternalMailer.send_verification_code_to_email(new_email, request.user.username, code)
+        
+        return Response({'message': f'A verification code has been sent to {new_email}.'})
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def verify_email_change(self, request):
+        new_email = request.data.get('new_email')
+        code = request.data.get('code')
+        
+        if not new_email or not code:
+            return Response({'error': 'New email and code are required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        new_email = new_email.lower().strip()
+        
+        verification = VerificationCode.objects.filter(
+            user=request.user, 
+            code=code, 
+            purpose='change_email',
+            is_verified=False
+        ).first()
+        
+        if not verification or not verification.is_valid:
+            return Response({'error': 'Invalid or expired verification code.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        # Double check uniqueness last second
+        if User.objects.filter(email__iexact=new_email).exclude(pk=request.user.pk).exists():
+            return Response({'error': 'This email was just registered by another user.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Mark as verified
+        verification.is_verified = True
+        verification.save()
+        
+        # Update user
+        user = request.user
+        user.email = new_email
+        user.email_verified = True # Since they verified the new one
+        user.save()
+        
+        return Response({
+            'message': 'Email updated successfully!', 
+            'user': UserSerializer(user).data
+        })
 
 class CoupleViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -813,6 +902,10 @@ class ImportantDateViewSet(BaseCoupleViewSet):
 class RuleViewSet(BaseCoupleViewSet):
     queryset = Rule.objects.all()
     serializer_class = RuleSerializer
+
+class CountdownViewSet(BaseCoupleViewSet):
+    queryset = Countdown.objects.all()
+    serializer_class = CountdownSerializer
 
 class BucketItemViewSet(BaseCoupleViewSet):
     queryset = BucketItem.objects.all()
