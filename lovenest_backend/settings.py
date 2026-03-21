@@ -27,12 +27,12 @@ sys.path.append(str(BASE_DIR / 'Super Admin'))
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-&+$%khh7od^2u5i_z-8t(j-_a#at7jlb!e90#y3c(6$o+vu&qg'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-&+$%khh7od^2u5i_z-8t(j-_a#at7jlb!e90#y3c(6$o+vu&qg')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition
@@ -157,7 +157,10 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 AUTH_USER_MODEL = 'api.User'
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOWED_ORIGINS = os.environ.get(
+    'CORS_ALLOWED_ORIGINS', 
+    'http://localhost:3000,http://127.0.0.1:3000'
+).split(',')
 CORS_ALLOW_CREDENTIALS = True
 
 REST_FRAMEWORK = {
