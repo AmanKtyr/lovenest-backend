@@ -13,12 +13,23 @@ class SubscriptionStatus(models.TextChoices):
     EXPIRED = 'EXPIRED', 'Expired'
     REJECTED = 'REJECTED', 'Rejected'
 
+class PlanDuration(models.TextChoices):
+    MONTHLY = 'MONTHLY', '1 Month'
+    YEARLY = 'YEARLY', '1 Year'
+    LIFETIME = 'LIFETIME', 'Lifetime'
+
 class UserSubscription(models.Model):
     couple = models.OneToOneField(Couple, on_delete=models.CASCADE, related_name='subscription')
     tier = models.CharField(
         max_length=20,
         choices=SubscriptionTier.choices,
         default=SubscriptionTier.FREE
+    )
+    plan_duration = models.CharField(
+        max_length=20,
+        choices=PlanDuration.choices,
+        default=PlanDuration.MONTHLY,
+        null=True, blank=True
     )
     status = models.CharField(
         max_length=20,
@@ -37,6 +48,18 @@ class UserSubscription(models.Model):
     def __str__(self):
         return f"{self.couple}'s {self.tier} Plan - {self.status}"
         
+    @property
+    def days_left(self):
+        if self.tier == SubscriptionTier.FREE or not self.end_date:
+            return None
+        
+        if self.status != SubscriptionStatus.ACTIVE:
+            return 0
+            
+        remaining = self.end_date - timezone.now()
+        days = remaining.days
+        return max(0, days)
+
     def is_active(self):
         if self.status != SubscriptionStatus.ACTIVE:
             return False
@@ -47,6 +70,8 @@ class UserSubscription(models.Model):
         if self.end_date and timezone.now() > self.end_date:
             self.status = SubscriptionStatus.EXPIRED
             self.tier = SubscriptionTier.FREE
+            # Reset duration for free tier
+            self.plan_duration = None
             self.save()
             return False
             

@@ -6,22 +6,22 @@ from .models import User, Memory, Notification
 @receiver(post_delete, sender=User)
 def delete_user_profile_image(sender, instance, **kwargs):
     """Deletes profile image from filesystem when user account is deleted."""
-    if instance.profile_image:
-        if os.path.isfile(instance.profile_image.path):
-            try:
+    try:
+        if instance.profile_image and hasattr(instance.profile_image, 'path'):
+            if os.path.isfile(instance.profile_image.path):
                 os.remove(instance.profile_image.path)
-            except Exception:
-                pass
+    except (ValueError, OSError, Exception):
+        pass
 
 @receiver(post_delete, sender=Memory)
 def delete_memory_image(sender, instance, **kwargs):
     """Deletes memory image from filesystem when memory entry is deleted."""
-    if instance.image:
-        if os.path.isfile(instance.image.path):
-            try:
+    try:
+        if instance.image and hasattr(instance.image, 'path'):
+            if os.path.isfile(instance.image.path):
                 os.remove(instance.image.path)
-            except Exception:
-                pass
+    except (ValueError, OSError, Exception):
+        pass
 
 
 def create_notification(sender_user, couple, verb, target_model=None, target_id=None, description=None):

@@ -67,6 +67,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         
         # If there's already a pending request, we simply overwrite it with the new tier/image
         sub.tier = validated_data['tier']
+        sub.plan_duration = validated_data['plan_duration']
         sub.status = SubscriptionStatus.PENDING_APPROVAL
         sub.payment_screenshot = validated_data['payment_screenshot']
         sub.transaction_id = validated_data['transaction_id']

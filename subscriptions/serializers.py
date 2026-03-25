@@ -1,13 +1,15 @@
 from rest_framework import serializers
-from .models import UserSubscription, SubscriptionTier, SubscriptionStatus
+from .models import UserSubscription, SubscriptionTier, SubscriptionStatus, PlanDuration
 from api.models import Coupon
 
 class UserSubscriptionSerializer(serializers.ModelSerializer):
     tier_name = serializers.CharField(source='get_tier_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    duration_display = serializers.CharField(source='get_plan_duration_display', read_only=True)
     couple_name = serializers.SerializerMethodField()
     couple_id = serializers.SerializerMethodField()
     is_active = serializers.BooleanField(read_only=True)
+    days_left = serializers.IntegerField(read_only=True)
     created_at = serializers.DateTimeField(source='last_updated', read_only=True)
     applied_coupon_details = serializers.SerializerMethodField()
     
@@ -15,6 +17,7 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
         model = UserSubscription
         fields = [
             'id', 'couple', 'couple_id', 'couple_name', 'tier', 'tier_name', 
+            'plan_duration', 'duration_display', 'days_left',
             'status', 'status_display', 'start_date', 'end_date', 
             'payment_screenshot', 'transaction_id', 'applied_coupon', 'applied_coupon_details', 'created_at', 'last_updated',
             'is_active'
@@ -37,9 +40,9 @@ class UserSubscriptionSerializer(serializers.ModelSerializer):
             }
         return None
 
-
 class PaymentUploadSerializer(serializers.Serializer):
     tier = serializers.ChoiceField(choices=SubscriptionTier.choices)
+    plan_duration = serializers.ChoiceField(choices=PlanDuration.choices)
     payment_screenshot = serializers.ImageField(required=True)
     transaction_id = serializers.CharField(required=True, max_length=100)
     coupon_code = serializers.CharField(required=False, allow_blank=True, max_length=50)

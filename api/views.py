@@ -129,6 +129,15 @@ class AuthViewSet(viewsets.ViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def logout(self, request):
+        try:
+            # Delete the token from the database
+            request.user.auth_token.delete()
+            return Response({'message': 'Successfully logged out.'}, status=status.HTTP_200_OK)
+        except (AttributeError, Token.DoesNotExist):
+            return Response({'error': 'No active token found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def verify_email(self, request):
         code = request.data.get('code')
         if not code:
@@ -754,46 +763,32 @@ class CoupleViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'])
     def request_deletion(self, request):
-        """Initiate space deletion request"""
-        couple = None
-        if hasattr(request.user, 'couple_as_p1'):
-            couple = request.user.couple_as_p1
-        elif hasattr(request.user, 'couple_as_p2'):
-            couple = request.user.couple_as_p2
+        """Hard-delete the current user account and everything associated with them instantly."""
+        user_id = request.user.id
+        email = request.user.email
         
-        if not couple:
-            # If user somehow reached here without a couple, just delete their account
-            request.user.delete()
-            return Response({'message': 'Account deleted successfully', 'deleted': True, 'account_deleted': True})
+        # We perform a 'Nuclear Delete'
+        # 1. Identify everything first
+        user_obj = User.objects.filter(id=user_id).first()
+        
+        if not user_obj:
+            return Response({'error': 'User not found'}, status=404)
 
-        # If user is the only one in the couple, delete user account (which also drops the couple due to CASCADE)
-        if not couple.partner_2:
-            request.user.delete()
-            return Response({'message': 'Account deleted successfully', 'deleted': True, 'account_deleted': True})
+        # 2. Deleting the user will cascade to Couple, Memories, Subscription etc.
+        #    We do it explicitly to be absolutely sure.
+        user_obj.delete()
+        
+        # 3. Double check if any orphaned records with same email remain (very rare, but possible if unique constraint is missing)
+        # This is the "Nuclear" part.
+        remaining_users = User.objects.filter(email__iexact=email)
+        if remaining_users.exists():
+            remaining_users.delete()
 
-        # Logic for 2 users:
-        if couple.is_deletion_pending:
-            return Response({'error': 'Deletion already requested'}, status=status.HTTP_400_BAD_REQUEST)
-
-        couple.is_deletion_pending = True
-        couple.deletion_requested_by = request.user
-        couple.deletion_requested_at = timezone.now()
-        couple.save()
-
-        # Notify partner
-        partner = couple.get_other_user(request.user)
-        from .signals import create_notification
-        if partner:
-            create_notification(
-                sender_user=request.user,
-                couple=couple,
-                verb="requested to delete the space",
-                target_model='Couple',
-                target_id=couple.id, # Using couple ID as target
-                description="Please confirm deletion in Settings."
-            )
-
-        return Response({'message': 'Deletion requested. Waiting for partner confirmation.', 'deleted': False})
+        return Response({
+            'message': 'Account and all data wiped successfully. You can now re-register.', 
+            'deleted': True, 
+            'account_deleted': True
+        })
 
     @action(detail=False, methods=['post'])
     def confirm_deletion(self, request):
@@ -813,11 +808,24 @@ class CoupleViewSet(viewsets.ViewSet):
         if couple.deletion_requested_by == request.user:
             return Response({'error': 'You cannot confirm your own request'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Confirm deletion - DELETE EVERYTHING
-        # Django's cascading delete will handle related models if configured correctly
-        couple.delete()
+        # Confirm deletion - DELETE EVERYTHING (Hard Delete)
+        # We delete the users explicitly. Deleting a user will also delete their Couple record
+        # and related data due to CASCADE on models.
+        p1 = couple.partner_1
+        p2 = couple.partner_2
         
-        return Response({'message': 'Space deleted successfully', 'deleted': True})
+        # We delete them in order. 
+        if p1:
+            p1.delete()
+        if p2:
+            p2.delete()
+            
+        # couple.delete() is implicit if both are deleted due to CASCADE, 
+        # but let's be sure if one was somehow missing
+        if Couple.objects.filter(pk=couple.pk).exists():
+            couple.delete()
+        
+        return Response({'message': 'Space and all accounts deleted successfully', 'deleted': True})
 
     @action(detail=False, methods=['post'])
     def cancel_deletion(self, request):

@@ -15,7 +15,23 @@ class UserSubscriptionAdmin(admin.ModelAdmin):
     actions = ['approve_subscription', 'reject_subscription']
 
     def approve_subscription(self, request, queryset):
-        queryset.update(status=SubscriptionStatus.ACTIVE)
+        from django.utils import timezone
+        from datetime import timedelta
+        from .models import PlanDuration
+        
+        for sub in queryset:
+            sub.status = SubscriptionStatus.ACTIVE
+            sub.start_date = timezone.now()
+            
+            if sub.plan_duration == PlanDuration.MONTHLY:
+                sub.end_date = sub.start_date + timedelta(days=30)
+            elif sub.plan_duration == PlanDuration.YEARLY:
+                sub.end_date = sub.start_date + timedelta(days=365)
+            elif sub.plan_duration == PlanDuration.LIFETIME:
+                sub.end_date = None
+            
+            sub.save()
+            
     approve_subscription.short_description = "Approve selected subscriptions"
 
     def reject_subscription(self, request, queryset):
