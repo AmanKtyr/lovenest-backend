@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     User, Couple, Memory, ImportantDate, Rule, BucketItem, LoveNote,
     LoveLanguage, LoveLanguageAction, GratitudeEntry, DateIdea, Question, Answer, Todo, Notification,
-    AnnouncementPopup, ContactMessage, SupportTicket, TicketMessage, Countdown
+    AnnouncementPopup, ContactMessage, SupportTicket, TicketMessage, Countdown, ChatMessage
 )
 from django.contrib.auth import authenticate
 
@@ -315,3 +315,11 @@ class SupportTicketSerializer(serializers.ModelSerializer):
         model = SupportTicket
         fields = ['id', 'user', 'subject', 'message', 'status', 'admin_reply', 'messages', 'created_at', 'updated_at']
         read_only_fields = ['couple', 'user', 'admin_reply', 'status', 'messages']
+
+class ChatMessageSerializer(serializers.ModelSerializer):
+    sender = UserSerializer(read_only=True)
+
+    class Meta:
+        model = ChatMessage
+        fields = ['id', 'sender', 'content', 'attachment', 'attachment_type', 'file_name', 'created_at']
+        read_only_fields = ['couple', 'sender', 'created_at']

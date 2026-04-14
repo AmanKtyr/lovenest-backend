@@ -46,3 +46,31 @@ def create_notification(sender_user, couple, verb, target_model=None, target_id=
         description=description or '',
     )
 
+from django.db.models.signals import post_save
+
+@receiver(post_save, sender=Notification)
+def emit_notification_on_save(sender, instance, created, **kwargs):
+    if created:
+        try:
+            from api.socket_events import sio
+            import asyncio
+            data = {
+                'id': instance.id,
+                'verb': instance.verb,
+                'description': instance.description,
+                'target_model': instance.target_model,
+                'created_at': instance.created_at.isoformat(),
+                'actor': {'username': instance.actor.username} if instance.actor else None
+            }
+            user_room = f"user_{instance.recipient.id}"
+            
+            async def emit_notif():
+                await sio.emit('new_notification', data, room=user_room)
+                
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(emit_notif())
+            else:
+                loop.run_until_complete(emit_notif())
+        except Exception as e:
+            print(f"Notification socket emit failed: {e}")

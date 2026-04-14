@@ -550,3 +550,36 @@ class SiteSetting(models.Model):
         obj, created = cls.objects.get_or_create(id=1)
         return obj
 
+class ChatMessage(models.Model):
+    """Real-time chat messages between partners, kept for 24 hours."""
+    couple = models.ForeignKey(Couple, on_delete=models.CASCADE, related_name='chat_messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    content = models.TextField(blank=True, null=True)
+    
+    # Attachments
+    attachment = models.FileField(upload_to='chat_attachments/%Y/%m/', blank=True, null=True)
+    attachment_type = models.CharField(max_length=20, blank=True, null=True) # image, video, document
+    file_name = models.CharField(max_length=255, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Chat: {self.sender.username} - {str(self.content)[:20] if self.content else 'File'}"
+
+# Signal: Deep delete to remove physical media files from server when ephemeral chat expires natively
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+import os
+
+@receiver(post_delete, sender=ChatMessage)
+def auto_delete_file_on_delete(sender, instance, **kwargs):
+    """
+    Deletes file from filesystem
+    when corresponding `ChatMessage` object is deleted.
+    """
+    if instance.attachment:
+        if os.path.isfile(instance.attachment.path):
+            os.remove(instance.attachment.path)

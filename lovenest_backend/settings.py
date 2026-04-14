@@ -83,7 +83,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'lovenest_backend.wsgi.application'
+ASGI_APPLICATION = 'lovenest_backend.asgi.application'
 
 
 # Database

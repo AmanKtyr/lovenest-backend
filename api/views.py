@@ -1324,6 +1324,64 @@ class SecureProfileImageView(generics.RetrieveAPIView):
             except Exception:
                 raise Http404("Image could not be served")
 
+from .models import ChatMessage
+from .serializers import ChatMessageSerializer
 
+class ChatViewSet(BaseCoupleViewSet):
+    queryset = ChatMessage.objects.all()
+    serializer_class = ChatMessageSerializer
 
+    def get_queryset(self):
+        couple = self.get_couple()
+        if not couple:
+            return self.queryset.none()
+        
+        # 24-hour auto-deletion
+        from django.utils import timezone
+        cutoff = timezone.now() - timezone.timedelta(hours=24)
+        ChatMessage.objects.filter(couple=couple, created_at__lt=cutoff).delete()
+        
+        return self.queryset.filter(couple=couple)
 
+    def perform_create(self, serializer):
+        couple = self.get_couple()
+        if not couple:
+            raise serializers.ValidationError("You must be in a couple to send messages.")
+        
+        # Save sender along with the couple
+        msg = serializer.save(couple=couple, sender=self.request.user)
+        
+        # Fire a Notification for the partner
+        recipient = couple.partner_1 if self.request.user == couple.partner_2 else couple.partner_2
+        if recipient:
+            from api.models import Notification
+            Notification.objects.create(
+                recipient=recipient,
+                actor=self.request.user,
+                verb='sent you a message',
+                target_model='ChatMessage',
+                target_id=str(msg.id),
+                description=str(msg.content)[:50] + '...' if msg.content else 'Sent an attachment'
+            )
+        
+        try:
+            from api.socket_events import sio
+            import asyncio
+            room = f"couple_{couple.id}"
+            
+            async def emit_msg():
+                await sio.emit('new_message', {
+                    'id': msg.id,
+                    'sender_id': msg.sender.id,
+                    'content': msg.content,
+                    'attachment': msg.attachment.url if msg.attachment else None,
+                    'attachment_type': msg.attachment_type,
+                    'file_name': msg.file_name,
+                    'created_at': msg.created_at.isoformat()
+                }, room=room)
+                
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(emit_msg())
+        except Exception:
+            pass

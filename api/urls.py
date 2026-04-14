@@ -6,7 +6,7 @@ from .views import (
     LoveLanguageViewSet, LoveLanguageActionViewSet, GratitudeEntryViewSet,
     DateIdeaViewSet, QuestionViewSet, AnswerViewSet, TodoViewSet, NotificationViewSet,
     CalendarViewSet, ActivePopupView, ContactMessageCreateView, UserSupportTicketViewSet,
-    SecureProfileImageView, health_check, CountdownViewSet
+    SecureProfileImageView, health_check, CountdownViewSet, ChatViewSet
 )
 
 router = DefaultRouter()
@@ -18,6 +18,7 @@ router.register(r'rules', RuleViewSet, basename='rules')
 router.register(r'bucket', BucketItemViewSet, basename='bucket')
 router.register(r'notes', LoveNoteViewSet, basename='notes')
 router.register(r'countdowns', CountdownViewSet, basename='countdowns')
+router.register(r'chat', ChatViewSet, basename='chat')
 
 # Phase 1: Advanced Features
 router.register(r'love_languages', LoveLanguageViewSet, basename='love_languages')
