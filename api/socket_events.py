@@ -3,6 +3,7 @@ import os
 import django
 from django.utils import timezone
 from datetime import timedelta
+from asgiref.sync import sync_to_async
 
 # Initialize Django (needed if this file is imported early by ASGI)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'lovenest_backend.settings')
@@ -13,11 +14,33 @@ from api.models import Couple, User, ChatMessage
 # Create an ASGI Async Server
 sio = socketio.AsyncServer(async_mode='asgi', cors_allowed_origins='*')
 
+@sync_to_async
+def get_user(user_id):
+    try:
+        return User.objects.get(id=user_id)
+    except User.DoesNotExist:
+        return None
+
+@sync_to_async
+def get_couple(couple_id):
+    try:
+        return Couple.objects.get(id=couple_id)
+    except Couple.DoesNotExist:
+        return None
+
+@sync_to_async
+def save_chat_message(couple, sender, content):
+    return ChatMessage.objects.create(couple=couple, sender=sender, content=content)
+
+@sync_to_async
+def cleanup_old_messages(couple_id):
+    cutoff = timezone.now() - timedelta(hours=24)
+    return ChatMessage.objects.filter(couple_id=couple_id, created_at__lt=cutoff).delete()
+
 @sio.event
 async def connect(sid, environ):
-    # Note: For production, extract user token from headers or query string
-    # For now, we will trust the client joining the "couple_room"
-    pass
+    # Industrial logging for debugging real-time connections
+    print(f"Socket connected: {sid}")
 
 @sio.event
 async def join_room(sid, data):
@@ -26,11 +49,13 @@ async def join_room(sid, data):
     
     if user_id:
         user_room = f"user_{user_id}"
-        sio.enter_room(sid, user_room)
+        await sio.enter_room(sid, user_room)
+        print(f"User {user_id} joined room: {user_room}")
         
     if couple_id:
         room = f"couple_{couple_id}"
-        sio.enter_room(sid, room)
+        await sio.enter_room(sid, room)
+        print(f"User {user_id} joined couple room: {room}")
         await sio.emit('joined', {'room': room, 'user': user_id}, room=room)
 
 @sio.event
@@ -46,28 +71,29 @@ async def send_message(sid, data):
         return
 
     # Delete messages older than 24h for this couple
-    cutoff = timezone.now() - timedelta(hours=24)
-    ChatMessage.objects.filter(couple_id=couple_id, created_at__lt=cutoff).delete()
+    await cleanup_old_messages(couple_id)
     
     # Save the new message
     try:
-        sender = User.objects.get(id=sender_id)
-        couple = Couple.objects.get(id=couple_id)
-        msg = ChatMessage.objects.create(couple=couple, sender=sender, content=content)
+        sender = await get_user(sender_id)
+        couple = await get_couple(couple_id)
         
-        room = f"couple_{couple_id}"
-        await sio.emit('new_message', {
-            'id': msg.id,
-            'sender_id': msg.sender.id,
-            'content': msg.content,
-            'created_at': msg.created_at.isoformat()
-        }, room=room)
+        if sender and couple:
+            msg = await save_chat_message(couple, sender, content)
+            
+            room = f"couple_{couple_id}"
+            await sio.emit('new_message', {
+                'id': msg.id,
+                'sender_id': sender.id,
+                'content': msg.content,
+                'created_at': msg.created_at.isoformat()
+            }, room=room)
     except Exception as e:
-        print(f"Chat Exception: {e}")
+        print(f"Chat Socket Exception: {e}")
 
 @sio.event
 async def disconnect(sid):
-    pass
+    print(f"Socket disconnected: {sid}")
 
 @sio.event
 async def typing(sid, data):
@@ -84,3 +110,4 @@ async def stop_typing(sid, data):
     if couple_id and user_id:
         room = f"couple_{couple_id}"
         await sio.emit('partner_stop_typing', {'user_id': user_id}, room=room, skip_sid=sid)
+

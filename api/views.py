@@ -27,6 +27,13 @@ from .serializers import (
     TodoSerializer, NotificationSerializer, AnnouncementPopupSerializer,
     ContactMessageCreateSerializer, SupportTicketSerializer, CountdownSerializer
 )
+from django.db.models import Q
+
+def get_current_couple(user):
+    """Industrial: Unified way to find a user's couple relationship."""
+    if not user or not user.is_authenticated:
+        return None
+    return Couple.objects.filter(Q(partner_1=user) | Q(partner_2=user)).first()
 
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
@@ -642,13 +649,13 @@ class CoupleViewSet(viewsets.ViewSet):
             return Response({'error': 'Invitation code is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check if user is already in a connected couple
-        if (hasattr(request.user, 'couple_as_p1') and request.user.couple_as_p1.partner_2) or \
-           (hasattr(request.user, 'couple_as_p2')):
+        current_couple = get_current_couple(request.user)
+        if current_couple and current_couple.partner_2:
             return Response({'error': 'You are already in a connected space. Please delete your current space to join a new one.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # If user is in a solo space, delete it to allow joining a new one
-        if hasattr(request.user, 'couple_as_p1') and not request.user.couple_as_p1.partner_2:
-            request.user.couple_as_p1.delete()
+        if current_couple and not current_couple.partner_2:
+            current_couple.delete()
         
         # Find couple with this invite code
         try:
@@ -705,11 +712,7 @@ class CoupleViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['patch'])
     def update_settings(self, request):
-        couple = None
-        if hasattr(request.user, 'couple_as_p1'):
-            couple = request.user.couple_as_p1
-        elif hasattr(request.user, 'couple_as_p2'):
-            couple = request.user.couple_as_p2
+        couple = get_current_couple(request.user)
             
         if not couple:
             return Response({'error': 'Not in a couple'}, status=status.HTTP_400_BAD_REQUEST)
@@ -732,11 +735,7 @@ class CoupleViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'])
     def my_couple(self, request):
-        couple = None
-        if hasattr(request.user, 'couple_as_p1'):
-            couple = request.user.couple_as_p1
-        elif hasattr(request.user, 'couple_as_p2'):
-            couple = request.user.couple_as_p2
+        couple = get_current_couple(request.user)
         
         if couple:
             return Response(CoupleSerializer(couple).data)
@@ -745,11 +744,7 @@ class CoupleViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
     def regenerate_code(self, request):
         """Regenerate invitation code for the couple"""
-        couple = None
-        if hasattr(request.user, 'couple_as_p1'):
-            couple = request.user.couple_as_p1
-        elif hasattr(request.user, 'couple_as_p2'):
-            couple = request.user.couple_as_p2
+        couple = get_current_couple(request.user)
         
         if not couple:
             return Response({'error': 'Not in a couple'}, status=status.HTTP_400_BAD_REQUEST)
@@ -857,12 +852,7 @@ class BaseCoupleViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_couple(self):
-        user = self.request.user
-        if hasattr(user, 'couple_as_p1'):
-            return user.couple_as_p1
-        elif hasattr(user, 'couple_as_p2'):
-            return user.couple_as_p2
-        return None
+        return get_current_couple(self.request.user)
 
     def get_queryset(self):
         couple = self.get_couple()
@@ -1120,12 +1110,7 @@ class CalendarViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
 
     def get_couple(self):
-        user = self.request.user
-        if hasattr(user, 'couple_as_p1'):
-            return user.couple_as_p1
-        elif hasattr(user, 'couple_as_p2'):
-            return user.couple_as_p2
-        return None
+        return get_current_couple(self.request.user)
 
     @action(detail=False, methods=['get'])
     def events(self, request):
@@ -1297,7 +1282,7 @@ class SecureProfileImageView(generics.RetrieveAPIView):
         is_self = request.user == target_user
         is_partner = False
         
-        user_couple = getattr(request.user, 'couple_as_p1', None) or getattr(request.user, 'couple_as_p2', None)
+        user_couple = get_current_couple(request.user)
         if user_couple:
             partner = user_couple.get_other_user(request.user)
             if partner == target_user:
@@ -1332,56 +1317,46 @@ class ChatViewSet(BaseCoupleViewSet):
     serializer_class = ChatMessageSerializer
 
     def get_queryset(self):
-        couple = self.get_couple()
+        user = self.request.user
+        couple = get_current_couple(user)
+        
         if not couple:
-            return self.queryset.none()
-        
-        # 24-hour auto-deletion
-        from django.utils import timezone
-        cutoff = timezone.now() - timezone.timedelta(hours=24)
-        ChatMessage.objects.filter(couple=couple, created_at__lt=cutoff).delete()
-        
-        return self.queryset.filter(couple=couple)
+            return ChatMessage.objects.none()
+            
+        return ChatMessage.objects.filter(couple=couple).select_related('sender').order_by('created_at')
 
     def perform_create(self, serializer):
         couple = self.get_couple()
         if not couple:
             raise serializers.ValidationError("You must be in a couple to send messages.")
         
-        # Save sender along with the couple
+        # Save message
         msg = serializer.save(couple=couple, sender=self.request.user)
         
-        # Fire a Notification for the partner
-        recipient = couple.partner_1 if self.request.user == couple.partner_2 else couple.partner_2
-        if recipient:
-            from api.models import Notification
-            Notification.objects.create(
-                recipient=recipient,
-                actor=self.request.user,
-                verb='sent you a message',
-                target_model='ChatMessage',
-                target_id=str(msg.id),
-                description=str(msg.content)[:50] + '...' if msg.content else 'Sent an attachment'
-            )
+        from .signals import create_notification, emit_socket_event
         
+        # 1. Create Notification for partner
+        create_notification(
+            sender_user=self.request.user,
+            couple=couple,
+            verb='sent you a message',
+            target_model='ChatMessage',
+            target_id=msg.id,
+            description=str(msg.content)[:50] + '...' if msg.content else 'Sent an attachment'
+        )
+        
+        # 2. Emit Real-time Socket Event
         try:
-            from api.socket_events import sio
-            import asyncio
             room = f"couple_{couple.id}"
-            
-            async def emit_msg():
-                await sio.emit('new_message', {
-                    'id': msg.id,
-                    'sender_id': msg.sender.id,
-                    'content': msg.content,
-                    'attachment': msg.attachment.url if msg.attachment else None,
-                    'attachment_type': msg.attachment_type,
-                    'file_name': msg.file_name,
-                    'created_at': msg.created_at.isoformat()
-                }, room=room)
-                
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(emit_msg())
-        except Exception:
-            pass
+            data = {
+                'id': msg.id,
+                'sender_id': msg.sender.id,
+                'content': msg.content,
+                'attachment': msg.attachment.url if msg.attachment else None,
+                'attachment_type': msg.attachment_type,
+                'file_name': msg.file_name,
+                'created_at': msg.created_at.isoformat()
+            }
+            emit_socket_event('new_message', data, room)
+        except Exception as e:
+            print(f"Chat emit failed: {e}")
