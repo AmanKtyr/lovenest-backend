@@ -5,6 +5,8 @@ from django.dispatch import receiver
 from .models import User, Memory, Notification, ChatMessage, Todo, BucketItem, Question
 from asgiref.sync import sync_to_async
 
+from asgiref.sync import async_to_sync
+
 def emit_socket_event(event_name, data, room):
     """
     Safely emit a socket event from a synchronous context (Django signal/view)
@@ -13,26 +15,24 @@ def emit_socket_event(event_name, data, room):
     try:
         from api.socket_events import sio
         
-        async def do_emit():
-            await sio.emit(event_name, data, room=room)
-        
+        # We try to use async_to_sync which is the standard way to bridge
+        # synchronous Django views/signals to asynchronous code in an ASGI setup.
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If we are in the thread with the running loop
-                loop.create_task(do_emit())
-            else:
-                # If loop exists but not running
-                loop.run_until_complete(do_emit())
-        except RuntimeError:
-            # No event loop in this thread, run in a new one or use threadsafe
+            async_to_sync(sio.emit)(event_name, data, room=room)
+        except Exception:
+            # Fallback for complex threading environments or if async_to_sync fails
+            import asyncio
+            async def do_emit():
+                await sio.emit(event_name, data, room=room)
+            
             try:
-                # This works if there is a main loop running in another thread
-                # but might be complex for local development. 
-                # Simplest fallback for runserver:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    loop.create_task(do_emit())
+                else:
+                    loop.run_until_complete(do_emit())
+            except RuntimeError:
                 asyncio.run(do_emit())
-            except Exception:
-                pass 
     except Exception as e:
         print(f"Socket emit failed: {e}")
 
