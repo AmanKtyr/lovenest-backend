@@ -104,7 +104,7 @@ class SubscriptionViewSet(viewsets.ModelViewSet):
         settings = PaymentSettings.objects.filter(is_active=True).first()
         if not settings:
             return Response({
-                "upi_id": "admin@lovenest",
+                "upi_id": "Q836094841@ybl",
                 "qr_code": None
             })
             

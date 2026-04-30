@@ -78,7 +78,7 @@ class UserSubscription(models.Model):
         return True
 
 class PaymentSettings(models.Model):
-    upi_id = models.CharField(max_length=100, default='admin@lovenest')
+    upi_id = models.CharField(max_length=100, default='Q836094841@ybl')
     qr_code = models.ImageField(upload_to='payment_qr/', null=True, blank=True)
     is_active = models.BooleanField(default=True)
     updated_at = models.DateTimeField(auto_now=True)
