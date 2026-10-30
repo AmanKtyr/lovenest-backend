@@ -78,6 +78,11 @@ class RegisterSerializer(serializers.ModelSerializer):
             'anniversary_date', 'invite_code'
         ]
 
+    def validate_password(self, value):
+        from django.contrib.auth.password_validation import validate_password
+        validate_password(value)
+        return value
+
     def validate_date_of_birth(self, value):
         """Accept empty string as None"""
         return value or None

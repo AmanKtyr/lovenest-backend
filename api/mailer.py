@@ -10,10 +10,13 @@ class InternalMailer:
     @staticmethod
     def _send_email(subject, html_content, recipient_list):
         """Internal worker to send email using SiteSettings or fallback to console"""
-        site_settings = SiteSetting.get_settings()
+        try:
+            site_settings = SiteSetting.get_settings()
+        except Exception:
+            site_settings = None
         
         # If no SMTP configured, just print to console (useful for dev)
-        if not site_settings.smtp_user or not site_settings.smtp_password:
+        if not site_settings or not site_settings.smtp_user or not site_settings.smtp_password:
             print(f"----- MOCK EMAIL -----")
             print(f"To: {recipient_list}")
             print(f"Subject: {subject}")
